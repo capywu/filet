@@ -1,6 +1,6 @@
 // 方眼編織圖產生器：離線快取
 // 有網路時一律抓最新版（所以更新會自動生效），沒網路時改用上次存下來的版本
-const CACHE = 'filet-v1';
+const CACHE = 'filet-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

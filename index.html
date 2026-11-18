@@ -185,7 +185,22 @@ button,.chip,.trow,.tab{touch-action:manipulation}
   </section>
 
   <section>
-    <h2>⑤ 編織圖設定</h2>
+    <h2>⑤ 方向與旋轉</h2>
+    <div class="row"><label>起鉤方向</label><select id="startEdge">
+      <option value="bottom">從下方開始（第 1 行在下）</option>
+      <option value="top">從上方開始</option>
+      <option value="left">從左邊開始</option>
+      <option value="right">從右邊開始</option>
+    </select></div>
+    <div class="note">編輯畫面維持你設計的方向，起鉤那一邊會用橘色粗線標出來。編織圖、文字說明、步驟表會自動轉成實際鉤的方向。</div>
+    <div class="row" style="margin-top:12px"><label>旋轉內容</label><input type="number" id="rotAng" value="90" step="15" style="width:80px"><span style="color:var(--muted);font-size:12px">度（正數＝順時針）</span></div>
+    <label class="check"><input type="checkbox" id="rotShape"> 外形也一起轉（畫布會自動放大）</label>
+    <div class="btns"><button class="primary" id="rotGo">套用旋轉</button><button id="rotL90">↺ 90°</button><button id="rotR90">↻ 90°</button><button id="rot180">180°</button></div>
+    <div class="note">會把形狀裡的所有內容（底圖格子、圖案、顏色）一起繞中心旋轉。斜角度會有鋸齒，轉錯可以按「復原」。</div>
+  </section>
+
+  <section>
+    <h2>⑥ 編織圖設定</h2>
     <div class="row"><label>邊框格數</label><input type="range" id="border" min="0" max="3" value="1"><span class="val" id="borderVal">1</span></div>
     <div class="row"><label>標題</label><input type="text" id="title" placeholder="（可留空）"></div>
     <div class="row"><label>標示色（單色時）</label><input type="color" id="color" value="#d9a464"></div>
@@ -194,7 +209,7 @@ button,.chip,.trow,.tab{touch-action:manipulation}
   </section>
 
   <section>
-    <h2>⑥ 匯出</h2>
+    <h2>⑦ 匯出</h2>
     <div class="btns">
       <button class="primary" id="pngBtn">下載編織圖 PNG</button>
       <button id="txtBtn">下載文字說明</button>
@@ -297,7 +312,7 @@ button,.chip,.trow,.tab{touch-action:manipulation}
 <script>
 const $=id=>document.getElementById(id);
 const FONT='"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif';
-const state={progress:{row:1,step:0},palette:[{name:'主色',hex:'#efe9dc'},{name:'紅',hex:'#c8553d'},{name:'深藍',hex:'#2f4f8f'}],ccol:null,borderCol:0,effCol:null,colorOn:false,mask:null,shapeName:'',objects:[],eff:null,W:24,H:21,cells:[],border:1,title:'',color:'#d9a464',theme:'dark',guides:false,shape:'rect'};
+const state={startEdge:'bottom',progress:{row:1,step:0},palette:[{name:'主色',hex:'#efe9dc'},{name:'紅',hex:'#c8553d'},{name:'深藍',hex:'#2f4f8f'}],ccol:null,borderCol:0,effCol:null,colorOn:false,mask:null,shapeName:'',objects:[],eff:null,W:24,H:21,cells:[],border:1,title:'',color:'#d9a464',theme:'dark',guides:false,shape:'rect'};
 let srcImg=null, tool='select', curTab='edit', sel=null, layer='pattern', stool='rect', smode='add';
 let undoStack=[], redoStack=[];
 let dl=null;
@@ -726,6 +741,10 @@ function drawGrid(){
     if(o===sel){x.setLineDash([5,4]);x.strokeStyle='#ffffff';x.lineWidth=2;x.strokeRect(X-1,Y-1,w+2,h+2);x.setLineDash([]);}
     else if(tool==='select'){x.strokeStyle='rgba(255,255,255,.28)';x.lineWidth=1;x.strokeRect(X+.5,Y+.5,w-1,h-1);}}
   cv.style.cursor=(tool==='select'&&!shp)?'default':'crosshair';
+  { // start edge marker
+    x.fillStyle=state.color;const t=4,e=state.startEdge||'bottom';
+    if(e==='bottom')x.fillRect(0,h-t,w,t);else if(e==='top')x.fillRect(0,0,w,t);else if(e==='left')x.fillRect(0,0,t,h);else x.fillRect(w-t,0,t,h);
+  }
   gridGeom={cs,L};
 }
 function cellAt(e){
@@ -879,7 +898,8 @@ function dc(x,X,top,bot,g,col){
 }
 function chn(x,X,top,g,col){x.strokeStyle=col;x.beginPath();x.ellipse(X,top+4,g.sx*.42,2.3,0,0,Math.PI*2);x.stroke();}
 function turn(x,X,top,g,col){x.strokeStyle=col;for(const f of [.2,.5,.8]){x.beginPath();x.ellipse(X,top+g.rh*f,2.2,g.rh*.13,0,0,Math.PI*2);x.stroke();}}
-function renderChart(){
+function renderChart(){return inWork(renderChartRaw);}
+function renderChartRaw(){
   const sz=chartSize(),cv=$('chartCanvas'),dpr=window.devicePixelRatio||1;
   let z=$('zoom').value==='fit'?Math.min(2,($('view').clientWidth-36)/sz.w):+$('zoom').value;
   z=Math.max(.2,z);
@@ -934,12 +954,14 @@ function rowsInstr(){
   }
   return out;
 }
-function buildText(){
+function buildText(){return inWork(buildTextRaw);}
+function buildTextRaw(){
   composite();
   const L=layout(),lines=[],fw=firstRowWidth();
   const uniform=SC.segs.every(sg=>sg.length===1&&sg[0][0]===0&&sg[0][1]===L.N);
   lines.push(state.title?`【${state.title}】方眼編織說明`:'【方眼編織說明】');
   lines.push('');
+  if(state.startEdge&&state.startEdge!=='bottom') lines.push(`起鉤方向：從設計圖的${EDGE_NAME[state.startEdge]}開始（編織圖已轉成實際鉤的方向）`);
   if(!uniform) lines.push(`形狀：${shapeLabel()}，第 1 行在最下面，往上依各行說明加減格`);
   lines.push(`尺寸：最寬 ${Math.max(...SC.segs.map(sg=>sg.length?sg[sg.length-1][1]-sg[0][0]:0))} 格 × ${RN_count()} 行${state.border?`（含 ${state.border} 格邊框）`:''}`);
   lines.push(`起針：鎖 ${3*fw} 針＋立起鎖 3 針（共 ${3*fw+3} 針）`);
@@ -1164,6 +1186,69 @@ function genDesign(){
 }
 $('dGo').onclick=genDesign;
 
+/* ---------- working orientation & rotation ---------- */
+const EDGE_NAME={bottom:'下方',top:'上方',left:'左邊',right:'右邊'};
+function gaugeRatio(){const {cpc,rpc}=designDims();return rpc/cpc;} // rows per cell-width
+function rotCW(g){const R=g.length,N=g[0].length,o=[];for(let i=0;i<N;i++){const row=[];for(let j=0;j<R;j++)row.push(g[R-1-j][i]);o.push(row);}return o;}
+function resampleGrid(g,R2,N2){const R=g.length,N=g[0].length,o=[];for(let r=0;r<R2;r++){const sr=Math.min(R-1,Math.floor((r+.5)*R/R2)),row=[];for(let c=0;c<N2;c++)row.push(g[sr][Math.min(N-1,Math.floor((c+.5)*N/N2))]);o.push(row);}return o;}
+function rotGrid(g,k,ar){for(let t=0;t<k;t++)g=rotCW(g);
+  if(k%2&&Math.abs(ar-1)>1e-6)g=resampleGrid(g,Math.max(1,Math.round(g.length*ar)),Math.max(1,Math.round(g[0].length/ar)));
+  return g;}
+let inWorkDepth=0;
+// run fn with the design temporarily turned so the chosen start edge is at the bottom (row 1)
+function inWork(fn){
+  if(inWorkDepth||!state.startEdge||state.startEdge==='bottom')return fn();
+  composite();
+  const L=layout(),N=L.N,R=L.R,b=L.b,full=f=>{const g=[];for(let r=0;r<R;r++){const row=[];for(let c=0;c<N;c++)row.push(f(c,r));g.push(row);}return g;};
+  const M=full((c,r)=>SC.work[r*N+c]),P=full((c,r)=>{const q=state.eff[r-b];return q&&q[c-b]?1:0;}),C=full((c,r)=>{const q=state.effCol[r-b];return q?(q[c-b]||0):0;});
+  const k={top:2,left:3,right:1}[state.startEdge],ar=gaugeRatio(),M2=rotGrid(M,k,ar),P2=rotGrid(P,k,ar),C2=rotGrid(C,k,ar);
+  const saved={W:state.W,H:state.H,cells:state.cells,ccol:state.ccol,mask:state.mask,shape:state.shape,shapeName:state.shapeName,objects:state.objects,eff:state.eff,effCol:state.effCol};
+  inWorkDepth++;
+  try{
+    state.shapeName=shapeLabel();state.shape='mask';state.mask=M2;state.H=Math.max(1,M2.length-2*b);state.W=Math.max(1,M2[0].length-2*b);
+    state.cells=P2.slice(b,b+state.H).map(r=>r.slice(b,b+state.W));
+    state.ccol=C2.slice(b,b+state.H).map(r=>r.slice(b,b+state.W));
+    state.objects=[];composite();
+    return fn();
+  }finally{inWorkDepth--;Object.assign(state,saved);composite();}
+}
+// rotate everything inside the shape (and optionally the shape itself) by any angle, clockwise
+function rotateDesign(angle,withShape){
+  angle=((angle%360)+360)%360;if(!angle)return;
+  composite();
+  const L=layout(),{cpc,rpc}=designDims(),N=L.N,R=L.R,b=L.b,a=angle*Math.PI/180,co=Math.cos(a),si=Math.sin(a);
+  const Wp=N/cpc,Hp=R/rpc;let N2=N,R2=R;
+  if(withShape){N2=Math.max(3,Math.round((Math.abs(Wp*co)+Math.abs(Hp*si))*cpc));R2=Math.max(3,Math.round((Math.abs(Wp*si)+Math.abs(Hp*co))*rpc));}
+  const W2p=N2/cpc,H2p=R2/rpc;
+  const src=(c2,r2)=>{const px=(c2+.5)/cpc-W2p/2,py=(r2+.5)/rpc-H2p/2,sx=px*co+py*si,sy=-px*si+py*co;
+    return [Math.floor((sy+Hp/2)*rpc),Math.floor((sx+Wp/2)*cpc)];};
+  ensureCcol();
+  const work=SC.work.slice(),base=state.cells,bcol=state.ccol;
+  const nm=[],nb=[],nc=[];
+  for(let r2=0;r2<R2;r2++){const mr=[],br=[],cr=[];for(let c2=0;c2<N2;c2++){const [r,c]=src(c2,r2),ins=r>=0&&r<R&&c>=0&&c<N;
+      mr.push(ins?work[r*N+c]:0);const q=ins&&base[r-b],qc=ins&&bcol[r-b];br.push(q&&q[c-b]?1:0);cr.push(qc?(qc[c-b]||0):0);}
+    nm.push(mr);nb.push(br);nc.push(cr);}
+  pushUndo();
+  for(const o of state.objects){
+    const g0=objGrid(o),cx=(o.x+b+g0[0].length/2)/cpc-Wp/2,cy=(o.y+b+g0.length/2)/rpc-Hp/2;
+    const x2=cx*co-cy*si,y2=cx*si+cy*co;
+    o.rot=(((o.rot||0)+angle)%360+360)%360;const g=objGrid(o);
+    o.x=Math.round((x2+W2p/2)*cpc-g[0].length/2)-b;o.y=Math.round((y2+H2p/2)*rpc-g.length/2)-b;
+  }
+  const W2=N2-2*b,H2=R2-2*b;
+  if(withShape){const lbl=shapeLabel();state.shape='mask';state.mask=nm;state.shapeName=lbl;}
+  state.W=Math.max(1,W2);state.H=Math.max(1,H2);
+  state.cells=nb.slice(b,b+state.H).map(r=>r.slice(b,b+state.W));
+  state.ccol=nc.slice(b,b+state.H).map(r=>r.slice(b,b+state.W));
+  $('wIn').max=Math.max(90,state.W);$('hIn').max=Math.max(120,state.H);syncSizeInputs();
+  sel=null;updObjTools();renderAll();toast(`已旋轉 ${angle}°`);
+}
+$('rotGo').onclick=()=>{const v=parseFloat($('rotAng').value);if(isNaN(v)){toast('請輸入角度');return;}rotateDesign(v,$('rotShape').checked);};
+$('rotL90').onclick=()=>rotateDesign(-90,$('rotShape').checked);
+$('rotR90').onclick=()=>rotateDesign(90,$('rotShape').checked);
+$('rot180').onclick=()=>rotateDesign(180,$('rotShape').checked);
+$('startEdge').onchange=()=>{state.startEdge=$('startEdge').value;renderAll();toast(`起鉤方向：從${EDGE_NAME[state.startEdge]}開始`);};
+
 /* ---------- step tracker ---------- */
 function progStarted(){return state.progress&&(state.progress.row>1||state.progress.step>0);}
 function splitChips(t){ // split on 、　；， at bracket depth 0
@@ -1195,7 +1280,8 @@ function setProg(row,step,msg){state.progress={row,step};clampProg();renderTrack
 function stepFwd(){const n=trkRows.length,{row,step}=state.progress;if(row>n)return;const c=rowChips(trkRows[row-1]).chips.length;
   if(step+1>=c){setProg(row+1,0,row+1>n?'全部完成！辛苦了 🎉':`第 ${row} 行完成！`);}else setProg(row,step+1);}
 function stepBack(){const {row,step}=state.progress;if(step>0)setProg(row,step-1);else if(row>1){const c=rowChips(trkRows[row-2]).chips.length;setProg(row-1,Math.max(0,c-1));}}
-function renderTrack(){
+function renderTrack(){return inWork(renderTrackRaw);}
+function renderTrackRaw(){
   trkRows=rowsInstr();clampProg();
   const n=trkRows.length,{row,step}=state.progress,cur=row<=n?trkRows[row-1]:null,rc=cur?rowChips(cur):{start:'',chips:[]},chips=rc.chips;
   const pct=n?Math.round(((row-1)+(chips.length?step/chips.length:0))/n*100):0;
@@ -1239,7 +1325,8 @@ document.addEventListener('keydown',e=>{
 /* ---------- status / render ---------- */
 function renderStatus(){
   composite();const L=layout();let n=0;for(const r of state.eff)for(const v of r)n+=v;
-  $('status').innerHTML=`<span>形狀 <b>${shapeLabel()}</b></span><span>最寬 <b>${L.N} 格</b> × <b>${RN_count()} 行</b></span><span>起針 <b>Ch ${3*firstRowWidth()} + 3</b></span><span>實心格 <b>${n}</b></span>`;
+  const wk=inWork(()=>({N:layout().N,rows:RN_count(),fw:firstRowWidth()}));
+  $('status').innerHTML=`<span>形狀 <b>${shapeLabel()}</b></span><span>起鉤 <b>${EDGE_NAME[state.startEdge||'bottom']}</b></span><span>最寬 <b>${wk.N} 格</b> × <b>${wk.rows} 行</b></span><span>起針 <b>Ch ${3*wk.fw} + 3</b></span><span>實心格 <b>${n}</b></span>`;
 }
 function renderAll(){
   composite();if(sel&&document.activeElement!==$('oRot'))$('oRot').value=sel.rot||0;
@@ -1251,12 +1338,13 @@ function renderAll(){
 }
 
 /* ---------- persistence ---------- */
-function projectJSON(){return JSON.stringify({app:'filet-chart',v:1,W:state.W,H:state.H,rows:state.cells.map(r=>r.join('')),border:state.border,title:state.title,color:state.color,theme:state.theme,guides:state.guides,progress:state.progress,palette:state.palette,borderCol:state.borderCol,ccol:(ensureCcol(),state.ccol.map(r=>r.map(v=>v.toString(36)).join(''))),shape:state.shape,shapeName:state.shapeName,mask:state.mask?state.mask.map(r=>r.join('')):null,objects:state.objects});}
+function projectJSON(){return JSON.stringify({app:'filet-chart',v:1,W:state.W,H:state.H,rows:state.cells.map(r=>r.join('')),border:state.border,title:state.title,color:state.color,theme:state.theme,guides:state.guides,startEdge:state.startEdge,progress:state.progress,palette:state.palette,borderCol:state.borderCol,ccol:(ensureCcol(),state.ccol.map(r=>r.map(v=>v.toString(36)).join(''))),shape:state.shape,shapeName:state.shapeName,mask:state.mask?state.mask.map(r=>r.join('')):null,objects:state.objects});}
 function applyProject(o){
   if(!o||!Array.isArray(o.rows))throw new Error('bad');
   state.W=o.W;state.H=o.H;state.cells=o.rows.map(s=>[...s].map(ch=>ch==='1'?1:0));
   state.palette=Array.isArray(o.palette)&&o.palette.length?o.palette:[{name:'主色',hex:'#efe9dc'},{name:'紅',hex:'#c8553d'},{name:'深藍',hex:'#2f4f8f'}];state.borderCol=o.borderCol||0;
   state.ccol=Array.isArray(o.ccol)?o.ccol.map(r=>[...r].map(ch=>parseInt(ch,36)||0)):null;
+  state.startEdge=['top','left','right'].includes(o.startEdge)?o.startEdge:'bottom';$('startEdge').value=state.startEdge;
   state.progress=o.progress&&o.progress.row?{row:o.progress.row,step:o.progress.step||0}:{row:1,step:0};
   state.border=o.border??1;state.title=o.title||'';state.color=o.color||'#d9a464';state.theme=o.theme||'dark';state.guides=!!o.guides;state.shape=['triangle','mask'].includes(o.shape)?o.shape:'rect';state.shapeName=o.shapeName||'';state.mask=Array.isArray(o.mask)?o.mask.map(r=>[...r].map(ch=>ch==='1'?1:0)):null;if(state.shape==='mask'&&!state.mask)state.shape='rect';state.objects=Array.isArray(o.objects)?o.objects:[];sel=null;
   $('border').value=state.border;$('borderVal').textContent=state.border;$('title').value=state.title;$('color').value=state.color;$('theme').value=state.theme;$('guides').checked=state.guides;
@@ -1292,8 +1380,8 @@ async function offer(filename,data,fallback){
 }
 function baseName(){return (state.title||'方眼編織圖').replace(/[\\/:*?"<>|]/g,'_');}
 $('pngBtn').onclick=()=>{
-  const sz=chartSize(),sc=2,c=document.createElement('canvas');c.width=sz.w*sc;c.height=sz.h*sc;
-  const x=c.getContext('2d');x.setTransform(sc,0,0,sc,0,0);drawChart(x);
+  const c=document.createElement('canvas');
+  inWork(()=>{const sz=chartSize(),sc=2;c.width=sz.w*sc;c.height=sz.h*sc;const x=c.getContext('2d');x.setTransform(sc,0,0,sc,0,0);drawChart(x);});
   c.toBlob(b=>offer(baseName()+'.png',b,()=>showImageModal(c.toDataURL('image/png'))),'image/png');
 };
 $('txtBtn').onclick=()=>offer(baseName()+'_說明.txt',buildText(),()=>{copyText();});
